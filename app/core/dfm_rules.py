@@ -22,20 +22,37 @@ class DFMRulesEngine:
         feedback = []
         for hole in holes:
             diameter = hole.get("diameter", 0)
-            if diameter < 2.0:
+            if diameter < 10.0:
                 feedback.append(DFMFeedback(
                     rule_id="CNC_MIN_HOLE_DIAMETER",
                     severity="medium",
-                    message=f"Hole {hole['id']} diameter ({diameter:.2f}mm) is below recommended minimum (2mm).",
+                    message=f"Hole {hole['id']} diameter ({diameter:.2f}mm) is below recommended minimum (10mm).",
                     feature_id=hole["id"]
                 ))
         return feedback
 
     @staticmethod
-    def check_min_wall_thickness(shape_data: Any) -> List[DFMFeedback]:
-        # Placeholder for v1: requires complex BRep analysis
-        # For now, we return empty list or a "not implemented" note if needed
-        return []
+    def check_panel_angles(angles: List[float]) -> List[DFMFeedback]:
+        feedback = []
+        for i, angle in enumerate(angles):
+            if angle > 90.0:
+                feedback.append(DFMFeedback(
+                    rule_id="CNC_PANEL_ANGLE",
+                    severity="medium",
+                    message=f"Panel junction {i+1} has an angle of {angle:.1f} degrees, which exceeds the 90-degree limit.",
+                ))
+        return feedback
+
+    @staticmethod
+    def check_min_wall_thickness(thickness: float) -> List[DFMFeedback]:
+        feedback = []
+        if thickness > 0 and thickness < 10.0:
+            feedback.append(DFMFeedback(
+                rule_id="CNC_MIN_WALL_THICKNESS",
+                severity="high",
+                message=f"Minimum wall thickness detected ({thickness:.2f}mm) is below the required 10mm.",
+            ))
+        return feedback
 
     @staticmethod
     def check_sharp_corners(shape_data: Any) -> List[DFMFeedback]:
@@ -45,10 +62,12 @@ class DFMRulesEngine:
     def evaluate_all(self, features: Dict[str, Any]) -> List[DFMFeedback]:
         feedback = []
         holes = features.get("holes", [])
+        angles = features.get("panel_angles", [])
+        wall_thickness = features.get("min_wall_thickness", 0.0)
         
         feedback.extend(self.check_hole_depth_ratio(holes))
         feedback.extend(self.check_min_hole_diameter(holes))
-        # feedback.extend(self.check_min_wall_thickness(features))
-        # feedback.extend(self.check_sharp_corners(features))
+        feedback.extend(self.check_panel_angles(angles))
+        feedback.extend(self.check_min_wall_thickness(wall_thickness))
         
         return feedback

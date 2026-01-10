@@ -8,6 +8,12 @@ from OCC.Core.BRep import BRep_Tool
 from OCC.Core.TopoDS import TopoDS_Shape
 from OCC.Core.BRepMesh import BRepMesh_IncrementalMesh
 from OCC.Core.Interface import Interface_Static
+from OCC.Core.StlAPI import StlAPI_Reader
+try:
+    from OCC.Core.RWObj import RWObj_Reader
+    OBJ_SUPPORTED = True
+except ImportError:
+    OBJ_SUPPORTED = False
 
 class GeometryEngine:
     def __init__(self):
@@ -23,14 +29,35 @@ class GeometryEngine:
         status = reader.ReadFile(file_path)
 
         if status == IFSelect_RetDone:
-            # Check for units
-            # In pythonocc, units are usually mm by default or handled by the kernel.
-            # We can force mm if needed or detect.
-            # For simplicity in v1, we assume the reader handles the conversion or we report what's there.
             reader.TransferRoots()
             self.shape = reader.OneShape()
             return True
         return False
+
+    def load_stl(self, file_path: str) -> bool:
+        """Loads an STL file and returns success status."""
+        if not os.path.exists(file_path):
+            return False
+
+        reader = StlAPI_Reader()
+        self.shape = TopoDS_Shape()
+        status = reader.Read(self.shape, file_path)
+        return status
+
+    def load_obj(self, file_path: str) -> bool:
+        """Loads an OBJ file and returns success status."""
+        if not OBJ_SUPPORTED:
+            return False
+        if not os.path.exists(file_path):
+            return False
+
+        reader = RWObj_Reader()
+        if not reader.ReadFile(file_path):
+            return False
+        
+        reader.TransferRoots()
+        self.shape = reader.OneShape()
+        return True
 
     def get_bounding_box(self) -> Tuple[float, float, float]:
         """Calculates the bounding box dimensions (X, Y, Z)."""

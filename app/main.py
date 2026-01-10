@@ -13,9 +13,14 @@ TEMP_DIR = "temp_uploads"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 @app.post("/analyze", response_model=AnalysisResponse)
-async def analyze_step_file(file: UploadFile = File(...)):
-    if not (file.filename.lower().endswith(".step") or file.filename.lower().endswith(".stp")):
-        raise HTTPException(status_code=400, detail="Invalid file format. Only .step and .stp files are supported.")
+async def analyze_geometry_file(file: UploadFile = File(...)):
+    filename_lower = file.filename.lower()
+    allowed_extensions = {".step", ".stp", ".stl", ".obj"}
+    if not any(filename_lower.endswith(ext) for ext in allowed_extensions):
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid file format. Supported formats: {', '.join(allowed_extensions)}"
+        )
 
     file_id = str(uuid.uuid4())
     temp_file_path = os.path.join(TEMP_DIR, f"{file_id}_{file.filename}")
@@ -27,8 +32,16 @@ async def analyze_step_file(file: UploadFile = File(...)):
 
         # Initialize Engines
         geo_engine = GeometryEngine()
-        if not geo_engine.load_step(temp_file_path):
-            raise HTTPException(status_code=422, detail="Geometry parsing failure. The file may be corrupt or not a valid solid.")
+        success = False
+        if filename_lower.endswith(".step") or filename_lower.endswith(".stp"):
+            success = geo_engine.load_step(temp_file_path)
+        elif filename_lower.endswith(".stl"):
+            success = geo_engine.load_stl(temp_file_path)
+        elif filename_lower.endswith(".obj"):
+            success = geo_engine.load_obj(temp_file_path)
+
+        if not success:
+            raise HTTPException(status_code=422, detail="Geometry parsing failure. The file may be corrupt or format not supported.")
 
         # Extract BBox
         dx, dy, dz = geo_engine.get_bounding_box()
@@ -36,13 +49,22 @@ async def analyze_step_file(file: UploadFile = File(...)):
         # Extract Features
         extractor = FeatureExtractor(geo_engine.shape)
         holes_data = extractor.extract_holes()
+        panel_angles = extractor.extract_panel_angles()
+        min_wall_thickness = extractor.calculate_min_wall_thickness()
+
         features = Features(
-            holes=[HoleFeature(**h) for h in holes_data]
+            holes=[HoleFeature(**h) for h in holes_data],
+            panel_angles=panel_angles,
+            min_wall_thickness=min_wall_thickness
         )
 
         # Evaluate DFM Rules
         rules_engine = DFMRulesEngine()
-        feedback = rules_engine.evaluate_all({"holes": holes_data})
+        feedback = rules_engine.evaluate_all({
+            "holes": holes_data,
+            "panel_angles": panel_angles,
+            "min_wall_thickness": min_wall_thickness
+        })
 
         return AnalysisResponse(
             status="success",
