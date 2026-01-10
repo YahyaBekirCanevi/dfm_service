@@ -40,7 +40,7 @@ class PanelAngleRule(DFMRule):
     def evaluate(self, features: Dict[str, Any]) -> List[DFMFeedback]:
         feedback = []
         for i, angle in enumerate(features.get("panel_angles", [])):
-            if angle > 90.5: # 90 degrees plus slight tolerance
+            if angle < 90.5: # 90 degrees plus slight tolerance
                 feedback.append(DFMFeedback(
                     rule_id="CNC_PANEL_ANGLE",
                     severity="medium",
