@@ -224,10 +224,36 @@ class FeatureExtractor:
         
         processed_pairs = set()
         
-        for i in range(1, edge_face_map.Extent() + 1):
+        # Use a more robust way to get the size
+        num_items = 0
+        try:
+            num_items = edge_face_map.Extent()
+        except AttributeError:
+            try:
+                num_items = edge_face_map.Size()
+            except AttributeError:
+                try:
+                    num_items = edge_face_map.extent()
+                except AttributeError:
+                    # Fallback or log
+                    pass
+        
+        for i in range(1, num_items + 1):
             faces_list = edge_face_map.FindFromIndex(i)
             
-            if faces_list.Extent() == 2:
+            num_faces = 0
+            try:
+                num_faces = faces_list.Extent()
+            except AttributeError:
+                try:
+                    num_faces = faces_list.Size()
+                except AttributeError:
+                    try:
+                        num_faces = faces_list.extent()
+                    except AttributeError:
+                        pass
+            
+            if num_faces == 2:
                 f1 = topods.Face(faces_list.First())
                 f2 = topods.Face(faces_list.Last())
                 
