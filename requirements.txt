@@ -3,6 +3,6 @@ uvicorn
 python-multipart
 pydantic
 requests
-pythonocc-core
-# NOTE: pythonocc-core usually requires conda for installation on Windows.
-# Run: conda install -c conda-forge pythonocc-core
+# NOTE: pythonocc-core is NOT available via pip on many platforms.
+# It MUST be installed via Conda/Mamba (as shown in Dockerfile).
+# For local dev: conda install -c conda-forge pythonocc-core
