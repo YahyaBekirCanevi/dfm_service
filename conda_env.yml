@@ -1,0 +1,14 @@
+name: dfm_engine
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pythonocc-core
+  - pip
+  - pip:
+      - fastapi
+      - uvicorn
+      - python-multipart
+      - pydantic
+      - requests

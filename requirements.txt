@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+python-multipart
+pydantic
+requests
+pythonocc-core
+# NOTE: pythonocc-core usually requires conda for installation on Windows.
+# Run: conda install -c conda-forge pythonocc-core
