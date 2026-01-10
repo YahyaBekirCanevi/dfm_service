@@ -48,24 +48,24 @@ async def analyze_geometry_file(file: UploadFile = File(...)):
         
         # Extract Features
         extractor = FeatureExtractor(geo_engine.shape)
-        features = extractor.extract_all_features()
+        raw_features = extractor.extract_all_features()
 
-        features = Features(
-            holes=[HoleFeature(**h) for h in features["holes"]],
-            panel_angles=features["panel_angles"],
-            min_wall_thickness=features["min_wall_thickness"],
-            internal_corners=features["internal_corners"]
+        features_model = Features(
+            holes=[HoleFeature(**h) for h in raw_features["holes"]],
+            panel_angles=raw_features["panel_angles"],
+            min_wall_thickness=raw_features["min_wall_thickness"],
+            internal_corners=raw_features["internal_corners"]
         )
 
         # Evaluate DFM Rules
         rules_engine = DFMRulesEngine()
-        feedback = rules_engine.evaluate_all(features)
+        feedback = rules_engine.evaluate_all(raw_features)
 
         return AnalysisResponse(
             status="success",
             units=geo_engine.get_units(),
             bounding_box=BoundingBox(x=dx, y=dy, z=dz),
-            features=features,
+            features=features_model,
             dfm_feedback=feedback
         )
 
