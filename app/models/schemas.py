@@ -10,13 +10,15 @@ class HoleFeature(BaseModel):
     id: str
     diameter: float
     depth: float
-    type: str  # "blind" or "through"
+    type: str  # "blind", "through", "counterbore", "countersink"
     axis: List[float]
+    sub_features: Optional[List[Dict[str, Any]]] = None
 
 class Features(BaseModel):
     holes: List[HoleFeature] = []
     panel_angles: List[float] = []
     min_wall_thickness: Optional[float] = None
+    internal_corners: List[Dict[str, Any]] = []
 
 class DFMFeedback(BaseModel):
     rule_id: str

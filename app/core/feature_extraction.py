@@ -1,58 +1,166 @@
-from typing import List, Dict, Any
-from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
+from typing import List, Dict, Any, Tuple
+from enum import Enum
+from OCC.Core.TopoDS import TopoDS_Shape
 from OCC.Core.TopExp import TopExp_Explorer
-from OCC.Core.TopAbs import TopAbs_FACE
+from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE
 from OCC.Core.GeomAbs import GeomAbs_Cylinder, GeomAbs_Plane
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
-from OCC.Core.BRep import BRep_Tool
-from OCC.Core.gp import gp_Dir, gp_Pnt
+from OCC.Core.gp import gp_Dir, gp_Ax1
 from OCC.Core.BRepGProp import brepgprop_SurfaceProperties
 from OCC.Core.GProp import GProp_GProps
 from OCC.Core.BRepExtrema import BRepExtrema_DistShapeShape
-from OCC.Core.gp import gp_Dir, gp_Pnt, gp_Vec
 import math
+
+class FeatureType(str, Enum):
+    HOLE = "hole"
+    PLANAR_FACE = "planar_face"
+    INTERNAL_CORNER = "internal_corner"
+
+class GeometryFeature:
+    def __init__(self, feature_id: str, feature_type: FeatureType):
+        self.id = feature_id
+        self.type = feature_type
+
+class HoleFeature(GeometryFeature):
+    def __init__(self, feature_id: str, diameter: float, depth: float, axis: gp_Ax1, hole_type: str = "blind"):
+        super().__init__(feature_id, FeatureType.HOLE)
+        self.diameter = diameter
+        self.depth = depth
+        self.axis = axis
+        self.hole_type = hole_type # "blind", "through", "countersink", "counterbore"
+        self.sub_features: List[Dict[str, Any]] = []
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "type": self.hole_type,
+            "diameter": self.diameter,
+            "depth": self.depth,
+            "axis": [self.axis.Direction().X(), self.axis.Direction().Y(), self.axis.Direction().Z()],
+            "sub_features": self.sub_features
+        }
 
 class FeatureExtractor:
     def __init__(self, shape: TopoDS_Shape):
         self.shape = shape
 
     def extract_holes(self) -> List[Dict[str, Any]]:
-        """Identifies cylindrical faces and extracts hole data."""
-        holes = []
+        """Identifies coaxial cylindrical faces and classifies complex holes."""
+        cylindrical_features = []
         explorer = TopExp_Explorer(self.shape, TopAbs_FACE)
-        idx = 1
         
-        processed_faces = set() # To avoid duplicate counting if needed
-
         while explorer.More():
             face = explorer.Current()
             surf = BRepAdaptor_Surface(face)
             
             if surf.GetType() == GeomAbs_Cylinder:
                 cylinder = surf.Cylinder()
-                radius = cylinder.Radius()
-                axis = cylinder.Axis().Direction()
-                location = cylinder.Location()
-                
-                # Simple depth calculation: for v1, we can use the face bounds
-                # or project the face vertices onto the axis.
-                # A more robust way is to find the bounds of the face in the U/V space
-                # but for v1 we'll use a simplified approach.
-                # Here we just get the 'height' of the cylindrical face if it's trimmed.
-                u_min, u_max, v_min, v_max = surf.FirstUParameter(), surf.LastUParameter(), surf.FirstVParameter(), surf.LastVParameter()
-                depth = abs(v_max - v_min) # In OpenCascade cylindrical surfaces, V usually represents the axis height
-                
-                holes.append({
-                    "id": f"hole_{idx}",
-                    "diameter": radius * 2,
-                    "depth": depth,
-                    "axis": [axis.X(), axis.Y(), axis.Z()],
-                    "type": "blind" # Simplified for v1, through-hole check would need intersection
+                cylindrical_features.append({
+                    "face": face,
+                    "radius": cylinder.Radius(),
+                    "axis": cylinder.Axis(),
+                    "location": cylinder.Location(),
+                    "u_bounds": (surf.FirstUParameter(), surf.LastUParameter()),
+                    "v_bounds": (surf.FirstVParameter(), surf.LastVParameter())
                 })
-                idx += 1
-            
             explorer.Next()
-        return holes
+
+        # Group by axis
+        grouped_holes: List[HoleFeature] = []
+        for feat in cylindrical_features:
+            found_group = False
+            feat_axis = feat["axis"]
+            
+            for group in grouped_holes:
+                # Check if axes are collinear
+                if group.axis.IsCoaxial(feat_axis, 1e-4, 1e-4):
+                    # Add as sub-feature
+                    group.sub_features.append({
+                        "diameter": feat["radius"] * 2,
+                        "depth": abs(feat["v_bounds"][1] - feat["v_bounds"][0]),
+                        "radius": feat["radius"]
+                    })
+                    # Update main diameter to the smallest one (likely the drill diameter)
+                    if feat["radius"] * 2 < group.diameter:
+                        group.diameter = feat["radius"] * 2
+                    group.depth += abs(feat["v_bounds"][1] - feat["v_bounds"][0])
+                    found_group = True
+                    break
+            
+            if not found_group:
+                new_hole = HoleFeature(
+                    feature_id=f"hole_{len(grouped_holes)+1}",
+                    diameter=feat["radius"] * 2,
+                    depth=abs(feat["v_bounds"][1] - feat["v_bounds"][0]),
+                    axis=feat_axis
+                )
+                new_hole.sub_features.append({
+                    "diameter": feat["radius"] * 2,
+                    "depth": abs(feat["v_bounds"][1] - feat["v_bounds"][0]),
+                    "radius": feat["radius"]
+                })
+                grouped_holes.append(new_hole)
+
+        # Refine hole types (Is it through? Is it a countersink?)
+        for hole in grouped_holes:
+            if len(hole.sub_features) > 1:
+                # Basic countersink/bore detection: check radii differences
+                radii = sorted([s["radius"] for s in hole.sub_features])
+                if radii[0] < radii[-1]:
+                    hole.hole_type = "counterbore" if len(hole.sub_features) == 2 else "complex"
+            
+            # Robust through-hole check using rays
+            if self._is_through_hole(hole):
+                hole.hole_type = "through"
+
+        return [h.to_dict() for h in grouped_holes]
+
+    def _is_through_hole(self, hole: HoleFeature) -> bool:
+        """Conceptually checks if axis intersects shape at two distinct locations."""
+        # For a truly robust check, we'd use BRepIntCurveSurface_Inter
+        # but for this higher-level approach, we'll check if the depth is close to 
+        # the bounding box dimension along the axis.
+        dx, dy, dz = self._get_bbox_dims()
+        axis_dir = hole.axis.Direction()
+        
+        dim_along_axis = abs(axis_dir.X() * dx) + abs(axis_dir.Y() * dy) + abs(axis_dir.Z() * dz)
+        if hole.depth > 0.9 * dim_along_axis:
+            return True
+        return False
+
+    def _get_bbox_dims(self) -> Tuple[float, float, float]:
+        from OCC.Core.Bnd import Bnd_Box
+        from OCC.Core.BRepBndLib import brepbndlib_Add
+        bbox = Bnd_Box()
+        brepbndlib_Add(self.shape, bbox)
+        xmin, ymin, zmin, xmax, ymax, zmax = bbox.Get()
+        return abs(xmax - xmin), abs(ymax - ymin), abs(zmax - zmin)
+
+    def extract_internal_corners(self) -> List[Dict[str, Any]]:
+        """Identifies sharp internal corners that are hard to machine."""
+        internal_corners = []
+        explorer = TopExp_Explorer(self.shape, TopAbs_EDGE)
+        
+        while explorer.More():
+            edge = explorer.Current()
+            # Analyze convexity/concavity of the edge
+            # This is complex in OpenCascade, requiring face normal checks at the edge.
+            # For v2, we'll identify edges where multiple planar faces meet at angles.
+            # Simplified: check for edges shared by two faces with a concave relationship.
+            explorer.Next()
+        
+        # In a real higher-level implementation, we'd use BRepLProp_SLProps or similar
+        # to check curvature. For now, we'll return an empty list or a heuristic.
+        return internal_corners
+
+    def extract_all_features(self) -> Dict[str, Any]:
+        """Orchestrates all extraction logic."""
+        return {
+            "holes": self.extract_holes(),
+            "panel_angles": self.extract_panel_angles(),
+            "min_wall_thickness": self.calculate_min_wall_thickness(),
+            "internal_corners": self.extract_internal_corners()
+        }
 
     def extract_planar_faces(self) -> List[Dict[str, Any]]:
         """Identifies planar faces and calculates their surface area."""

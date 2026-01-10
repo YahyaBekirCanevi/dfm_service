@@ -7,7 +7,7 @@ from .core.geometry_utils import GeometryEngine
 from .core.feature_extraction import FeatureExtractor
 from .core.dfm_rules import DFMRulesEngine
 
-app = FastAPI(title="DFM Engine v1", description="Deterministic DFM analysis for 3-axis CNC milling")
+app = FastAPI(title="DFM Engine", description="Deterministic DFM analysis for 3-axis CNC milling")
 
 TEMP_DIR = "temp_uploads"
 os.makedirs(TEMP_DIR, exist_ok=True)
@@ -48,23 +48,18 @@ async def analyze_geometry_file(file: UploadFile = File(...)):
         
         # Extract Features
         extractor = FeatureExtractor(geo_engine.shape)
-        holes_data = extractor.extract_holes()
-        panel_angles = extractor.extract_panel_angles()
-        min_wall_thickness = extractor.calculate_min_wall_thickness()
+        features = extractor.extract_all_features()
 
         features = Features(
-            holes=[HoleFeature(**h) for h in holes_data],
-            panel_angles=panel_angles,
-            min_wall_thickness=min_wall_thickness
+            holes=[HoleFeature(**h) for h in features["holes"]],
+            panel_angles=features["panel_angles"],
+            min_wall_thickness=features["min_wall_thickness"],
+            internal_corners=features["internal_corners"]
         )
 
         # Evaluate DFM Rules
         rules_engine = DFMRulesEngine()
-        feedback = rules_engine.evaluate_all({
-            "holes": holes_data,
-            "panel_angles": panel_angles,
-            "min_wall_thickness": min_wall_thickness
-        })
+        feedback = rules_engine.evaluate_all(features)
 
         return AnalysisResponse(
             status="success",

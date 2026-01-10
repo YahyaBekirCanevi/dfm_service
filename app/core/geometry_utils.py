@@ -4,10 +4,7 @@ from OCC.Core.STEPControl import STEPControl_Reader
 from OCC.Core.IFSelect import IFSelect_RetDone
 from OCC.Core.Bnd import Bnd_Box
 from OCC.Core.BRepBndLib import brepbndlib_Add
-from OCC.Core.BRep import BRep_Tool
 from OCC.Core.TopoDS import TopoDS_Shape
-from OCC.Core.BRepMesh import BRepMesh_IncrementalMesh
-from OCC.Core.Interface import Interface_Static
 from OCC.Core.StlAPI import StlAPI_Reader
 try:
     from OCC.Core.RWObj import RWObj_Reader

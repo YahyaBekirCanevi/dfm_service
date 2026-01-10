@@ -1,11 +1,16 @@
 from typing import List, Dict, Any
+from abc import ABC, abstractmethod
 from ..models.schemas import DFMFeedback
 
-class DFMRulesEngine:
-    @staticmethod
-    def check_hole_depth_ratio(holes: List[Dict[str, Any]]) -> List[DFMFeedback]:
+class DFMRule(ABC):
+    @abstractmethod
+    def evaluate(self, features: Dict[str, Any]) -> List[DFMFeedback]:
+        pass
+
+class HoleDepthRatioRule(DFMRule):
+    def evaluate(self, features: Dict[str, Any]) -> List[DFMFeedback]:
         feedback = []
-        for hole in holes:
+        for hole in features.get("holes", []):
             diameter = hole.get("diameter", 0)
             depth = hole.get("depth", 0)
             if diameter > 0 and (depth / diameter) > 10:
@@ -17,10 +22,10 @@ class DFMRulesEngine:
                 ))
         return feedback
 
-    @staticmethod
-    def check_min_hole_diameter(holes: List[Dict[str, Any]]) -> List[DFMFeedback]:
+class MinHoleDiameterRule(DFMRule):
+    def evaluate(self, features: Dict[str, Any]) -> List[DFMFeedback]:
         feedback = []
-        for hole in holes:
+        for hole in features.get("holes", []):
             diameter = hole.get("diameter", 0)
             if diameter < 2.0:
                 feedback.append(DFMFeedback(
@@ -31,43 +36,47 @@ class DFMRulesEngine:
                 ))
         return feedback
 
-    @staticmethod
-    def check_panel_angles(angles: List[float]) -> List[DFMFeedback]:
+class PanelAngleRule(DFMRule):
+    def evaluate(self, features: Dict[str, Any]) -> List[DFMFeedback]:
         feedback = []
-        for i, angle in enumerate(angles):
-            if angle <= 90.0:
+        for i, angle in enumerate(features.get("panel_angles", [])):
+            if angle > 90.5: # 90 degrees plus slight tolerance
                 feedback.append(DFMFeedback(
                     rule_id="CNC_PANEL_ANGLE",
                     severity="medium",
-                    message=f"Panel junction {i+1} has an angle of {angle:.1f} degrees, which exceeds the 90-degree limit.",
+                    message=f"Panel junction {i+1} has an angle of {angle:.1f} degrees, which exceeds the 90-degree limit for standard setups.",
                 ))
         return feedback
 
-    @staticmethod
-    def check_min_wall_thickness(thickness: float) -> List[DFMFeedback]:
+class MinWallThicknessRule(DFMRule):
+    def evaluate(self, features: Dict[str, Any]) -> List[DFMFeedback]:
         feedback = []
-        if thickness > 0 and thickness < 2.0:
+        thickness = features.get("min_wall_thickness", 0.0)
+        if 0 < thickness < 2.0:
             feedback.append(DFMFeedback(
                 rule_id="CNC_MIN_WALL_THICKNESS",
                 severity="high",
-                message=f"Minimum wall thickness detected ({thickness:.2f}mm) is below the required 2mm.",
+                message=f"Minimum wall thickness detected ({thickness:.2f}mm) is below the recommended 2mm for structural integrity.",
             ))
         return feedback
 
-    @staticmethod
-    def check_sharp_corners(shape_data: Any) -> List[DFMFeedback]:
-        # Placeholder for v1: check internal radii
+class SharpInternalCornerRule(DFMRule):
+    def evaluate(self, features: Dict[str, Any]) -> List[DFMFeedback]:
+        # Placeholder for complex logic
         return []
 
+class DFMRulesEngine:
+    def __init__(self):
+        self.rules: List[DFMRule] = [
+            HoleDepthRatioRule(),
+            MinHoleDiameterRule(),
+            PanelAngleRule(),
+            MinWallThicknessRule(),
+            SharpInternalCornerRule()
+        ]
+
     def evaluate_all(self, features: Dict[str, Any]) -> List[DFMFeedback]:
-        feedback = []
-        holes = features.get("holes", [])
-        angles = features.get("panel_angles", [])
-        wall_thickness = features.get("min_wall_thickness", 0.0)
-        
-        feedback.extend(self.check_hole_depth_ratio(holes))
-        feedback.extend(self.check_min_hole_diameter(holes))
-        feedback.extend(self.check_panel_angles(angles))
-        feedback.extend(self.check_min_wall_thickness(wall_thickness))
-        
-        return feedback
+        all_feedback = []
+        for rule in self.rules:
+            all_feedback.extend(rule.evaluate(features))
+        return all_feedback
