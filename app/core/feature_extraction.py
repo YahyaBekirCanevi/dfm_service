@@ -257,10 +257,14 @@ class FeatureExtractor:
                 f1 = topods.Face(faces_list.First())
                 f2 = topods.Face(faces_list.Last())
                 
-                # Create a stable identifier for the pair
-                # We use HashCode or similar, but the most stable is to use the shapes themselves
-                # in a sorted tuple if they are hashable. In pythonocc they usually are.
-                pair = tuple(sorted((f1.HashCode(10000000), f2.HashCode(10000000))))
+                # Use a stable identifier for the pair
+                def get_shape_hash(shape):
+                    try:
+                        return shape.HashCode(10000000)
+                    except AttributeError:
+                        return hash(shape)
+                
+                pair = tuple(sorted((get_shape_hash(f1), get_shape_hash(f2))))
                 
                 if pair not in processed_pairs:
                     processed_pairs.add(pair)
