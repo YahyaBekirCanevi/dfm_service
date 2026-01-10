@@ -16,7 +16,6 @@ class HoleFeature(BaseModel):
 
 class Features(BaseModel):
     holes: List[HoleFeature] = []
-    panel_angles: List[float] = []
     min_wall_thickness: Optional[float] = None
     internal_corners: List[Dict[str, Any]] = []
 

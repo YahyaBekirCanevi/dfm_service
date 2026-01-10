@@ -1,7 +1,8 @@
 from typing import List, Dict, Any, Tuple
 from enum import Enum
-from OCC.Core.TopoDS import TopoDS_Shape
-from OCC.Core.TopExp import TopExp_Explorer
+from OCC.Core.TopoDS import TopoDS_Shape, topods
+from OCC.Core.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
+from OCC.Core.TopExp import topexp_MapShapesAndAncestors, TopExp_Explorer
 from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE
 from OCC.Core.GeomAbs import GeomAbs_Cylinder, GeomAbs_Plane
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
@@ -215,22 +216,42 @@ class FeatureExtractor:
 
     def extract_panel_angles(self) -> List[float]:
         """Calculates angles between adjacent planar faces."""
-        planar_faces = self.extract_planar_faces()
         angles = []
         
-        # This is a simplified approach. Ideally we'd check for shared edges.
-        # For v1, we'll just check all pairs of non-parallel planar faces.
-        for i in range(len(planar_faces)):
-            for j in range(i + 1, len(planar_faces)):
-                n1 = gp_Dir(planar_faces[i]["normal"][0], planar_faces[i]["normal"][1], planar_faces[i]["normal"][2])
-                n2 = gp_Dir(planar_faces[j]["normal"][0], planar_faces[j]["normal"][1], planar_faces[j]["normal"][2])
+        # Map edges to faces to find adjacent ones
+        edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
+        topexp_MapShapesAndAncestors(self.shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
+        
+        processed_pairs = set()
+        
+        for i in range(1, edge_face_map.Extent() + 1):
+            faces_list = edge_face_map.FindFromIndex(i)
+            
+            if faces_list.Extent() == 2:
+                f1 = topods.Face(faces_list.First())
+                f2 = topods.Face(faces_list.Last())
                 
-                dot = abs(n1.Dot(n2))
-                if dot < 0.99: # Not parallel
-                    angle_rad = n1.Angle(n2)
-                    angle_deg = math.degrees(angle_rad)
-                    # We usually want the angle between the panels themselves (internal or external)
-                    # For milling, we care about the angle of the meat/void.
-                    # Here we just report the angle between normals.
-                    angles.append(angle_deg)
+                # Create a stable identifier for the pair
+                # We use HashCode or similar, but the most stable is to use the shapes themselves
+                # in a sorted tuple if they are hashable. In pythonocc they usually are.
+                pair = tuple(sorted((f1.HashCode(10000000), f2.HashCode(10000000))))
+                
+                if pair not in processed_pairs:
+                    processed_pairs.add(pair)
+                    
+                    s1 = BRepAdaptor_Surface(f1)
+                    s2 = BRepAdaptor_Surface(f2)
+                    
+                    if s1.GetType() == GeomAbs_Plane and s2.GetType() == GeomAbs_Plane:
+                        n1 = s1.Plane().Axis().Direction()
+                        n2 = s2.Plane().Axis().Direction()
+                        
+                        dot = abs(n1.Dot(n2))
+                        if dot < 0.999: # Not parallel
+                            angle_rad = n1.Angle(n2)
+                            angle_deg = math.degrees(angle_rad)
+                            # Normal angle 135 means faces meet at 45 (internal or external)
+                            # Normal angle 45 means faces meet at 135 (internal or external)
+                            angles.append(angle_deg)
+                            
         return angles

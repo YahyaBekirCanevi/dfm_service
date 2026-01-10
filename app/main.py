@@ -52,7 +52,6 @@ async def analyze_geometry_file(file: UploadFile = File(...)):
 
         features_model = Features(
             holes=[HoleFeature(**h) for h in raw_features["holes"]],
-            panel_angles=raw_features["panel_angles"],
             min_wall_thickness=raw_features["min_wall_thickness"],
             internal_corners=raw_features["internal_corners"]
         )

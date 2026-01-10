@@ -52,7 +52,7 @@ class MinWallThicknessRule(DFMRule):
     def evaluate(self, features: Dict[str, Any]) -> List[DFMFeedback]:
         feedback = []
         thickness = features.get("min_wall_thickness", 0.0)
-        if 0 < thickness < 2.0:
+        if thickness < 2.0:
             feedback.append(DFMFeedback(
                 rule_id="CNC_MIN_WALL_THICKNESS",
                 severity="high",
