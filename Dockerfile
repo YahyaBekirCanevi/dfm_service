@@ -9,9 +9,10 @@ RUN micromamba install -y -n base -f /tmp/conda_env.yml && \
 COPY --chown=$MAMBA_USER:$MAMBA_USER . /app
 WORKDIR /app
 
-# Expose the port FastAPI will run on
-EXPOSE 8000
+# Expose the port (Render uses $PORT)
+ENV PORT=8000
+EXPOSE $PORT
 
 # Start the application using uvicorn
-# Note: Render provides a $PORT environment variable
-CMD ["micromamba", "run", "-n", "base", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# We use a shell to expand the $PORT variable
+CMD ["sh", "-c", "micromamba run -n base uvicorn app.main:app --host 0.0.0.0 --port $PORT"]
