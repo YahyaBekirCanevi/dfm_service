@@ -22,11 +22,11 @@ class DFMRulesEngine:
         feedback = []
         for hole in holes:
             diameter = hole.get("diameter", 0)
-            if diameter < 10.0:
+            if diameter < 2.0:
                 feedback.append(DFMFeedback(
                     rule_id="CNC_MIN_HOLE_DIAMETER",
                     severity="medium",
-                    message=f"Hole {hole['id']} diameter ({diameter:.2f}mm) is below recommended minimum (10mm).",
+                    message=f"Hole {hole['id']} diameter ({diameter:.2f}mm) is below recommended minimum (2mm).",
                     feature_id=hole["id"]
                 ))
         return feedback
@@ -35,7 +35,7 @@ class DFMRulesEngine:
     def check_panel_angles(angles: List[float]) -> List[DFMFeedback]:
         feedback = []
         for i, angle in enumerate(angles):
-            if angle > 90.0:
+            if angle <= 90.0:
                 feedback.append(DFMFeedback(
                     rule_id="CNC_PANEL_ANGLE",
                     severity="medium",
@@ -46,11 +46,11 @@ class DFMRulesEngine:
     @staticmethod
     def check_min_wall_thickness(thickness: float) -> List[DFMFeedback]:
         feedback = []
-        if thickness > 0 and thickness < 10.0:
+        if thickness > 0 and thickness < 2.0:
             feedback.append(DFMFeedback(
                 rule_id="CNC_MIN_WALL_THICKNESS",
                 severity="high",
-                message=f"Minimum wall thickness detected ({thickness:.2f}mm) is below the required 10mm.",
+                message=f"Minimum wall thickness detected ({thickness:.2f}mm) is below the required 2mm.",
             ))
         return feedback
 
