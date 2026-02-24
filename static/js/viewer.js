@@ -48,14 +48,19 @@ export class DFMViewer {
     }
 
     async loadModel(url, analysisData) {
+        console.log('ThreeJS: loadModel called', { url, analysisData });
         this.currentData = analysisData;
         
         // Clear previous
+        console.log('ThreeJS: Clearing scene...');
         while(this.modelGroup.children.length > 0) this.modelGroup.remove(this.modelGroup.children[0]);
         while(this.markers.children.length > 0) this.markers.remove(this.markers.children[0]);
 
+        console.log('ThreeJS: Starting OCCTLoader.load()...');
         this.loader.load(url, (occtResult, buildMeshFunc) => {
+            console.log('ThreeJS: OCCTLoader callback received', occtResult);
             if (occtResult && occtResult.success && occtResult.meshes) {
+                console.log(`ThreeJS: Building ${occtResult.meshes.length} meshes...`);
                 occtResult.meshes.forEach(meshData => {
                     const { mesh, edges } = buildMeshFunc(meshData, true);
                     this.modelGroup.add(mesh);

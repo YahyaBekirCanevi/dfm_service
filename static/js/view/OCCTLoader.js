@@ -151,12 +151,16 @@ export class OCCTLoader {
     }
 
     async load(fileUrl, resultCallback) {
+        console.log('OCCTLoader: load called', fileUrl);
         await this.ensureThreeLoaded();
 
+        console.log('OCCTLoader: Importing occt-import-js...');
         const OCCT = (await import("occt-import-js")).default;
 
+        console.log('OCCTLoader: Initializing OCCT WASM...');
         const occt = await OCCT({
             locateFile: (file) => {
+                console.log('OCCTLoader: locateFile called for', file);
                 if (file.endsWith(".wasm")) {
                     return "/occt-import-js.wasm";
                 }
@@ -165,15 +169,18 @@ export class OCCTLoader {
         });
 
         try {
+            console.log('OCCTLoader: Fetching file from', fileUrl);
             const response = await fetch(fileUrl);
             const buffer = await response.arrayBuffer();
             const fileBuffer = new Uint8Array(buffer);
 
+            console.log('OCCTLoader: Reading STEP file buffer...', fileBuffer.length);
             const occtShape = occt.ReadStepFile(fileBuffer, null);
+            console.log('OCCTLoader: STEP file read result:', occtShape);
 
             resultCallback(occtShape, this.BuildMesh.bind(this));
         } catch (error) {
-            console.error("Error loading STEP file:", error);
+            console.error("OCCTLoader: Error loading STEP file:", error);
         }
     }
 }

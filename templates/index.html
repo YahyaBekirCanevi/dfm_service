@@ -214,7 +214,7 @@
               hx-post="/analyze"
               hx-encoding="multipart/form-data"
               hx-swap="none"
-              onhtmx:after-request="handleUploadResponse(event)"
+              hx-on:htmx:after-request="handleUploadResponse(event)"
             >
               <label for="file-upload" class="upload-btn"
                 >Choose STEP File</label
@@ -253,35 +253,72 @@
       </div>
     </div>
 
-    <script type="module">
-      import { DFMViewer } from "/static/js/viewer.js";
-
-      window.dfmViewer = new DFMViewer("viewport");
+    <script>
+      // Global Error Handling for Debugging
+      window.addEventListener("error", (event) => {
+        console.error("Global Error:", event.error);
+        const statusMsg = document.getElementById("status-msg");
+        if (statusMsg) {
+          statusMsg.textContent =
+            "Runtime Error: " + (event.error?.message || "Unknown error");
+          statusMsg.style.color = "#ef4444";
+        }
+      });
 
       window.handleUploadResponse = (event) => {
+        console.log("HTMX: Request finished", event.detail);
         const loading = document.getElementById("loading-overlay");
-        loading.style.display = "none";
+        if (loading) loading.style.display = "none";
 
         if (event.detail.successful) {
-          const response = JSON.parse(event.detail.xhr.responseText);
-          updateUI(response);
+          console.log("HTMX: Success, parsing response...");
+          try {
+            const response = JSON.parse(event.detail.xhr.responseText);
+            console.log("API Response:", response);
 
-          // Trigger 3D load
-          const file = document.getElementById("file-upload").files[0];
-          const url = URL.createObjectURL(file);
-          window.dfmViewer.loadModel(url, response);
+            // Call the UI update function (defined below or in module)
+            if (window.updateUI) window.updateUI(response);
+
+            // Trigger 3D load if viewer exists
+            const file = document.getElementById("file-upload").files[0];
+            if (file && window.dfmViewer) {
+              console.log(
+                "ThreeJS: Creating blob URL and loading model...",
+                file.name,
+              );
+              const url = URL.createObjectURL(file);
+              window.dfmViewer.loadModel(url, response);
+            } else {
+              console.warn("ThreeJS: Viewer or file not ready", {
+                hasViewer: !!window.dfmViewer,
+                hasFile: !!file,
+              });
+            }
+          } catch (e) {
+            console.error("Frontend: Error processing response", e);
+          }
         } else {
-          document.getElementById("status-msg").textContent =
-            "Error: " + event.detail.xhr.statusText;
-          document.getElementById("status-msg").style.color = "#ef4444";
+          console.error(
+            "HTMX: Error",
+            event.detail.xhr.status,
+            event.detail.xhr.statusText,
+          );
+          const statusMsg = document.getElementById("status-msg");
+          if (statusMsg) {
+            statusMsg.textContent =
+              "Error: " + (event.detail.xhr.statusText || "Server error");
+            statusMsg.style.color = "#ef4444";
+          }
         }
       };
 
-      function updateUI(data) {
+      window.updateUI = (data) => {
+        console.log("UI: Updating feedback list...");
         const container = document.getElementById("feedback-items");
+        if (!container) return;
         container.innerHTML = "";
 
-        if (data.dfm_feedback.length === 0) {
+        if (!data.dfm_feedback || data.dfm_feedback.length === 0) {
           container.innerHTML =
             '<p style="color: #10b981">No manufacturability issues detected.</p>';
           return;
@@ -294,16 +331,37 @@
                     <div class="feedback-title">${item.rule_id}</div>
                     <div class="feedback-msg">${item.message}</div>
                 `;
-          div.onclick = () => window.dfmViewer.highlightRule(item);
+          div.onclick = () => {
+            if (window.dfmViewer) window.dfmViewer.highlightRule(item);
+          };
           container.appendChild(div);
         });
 
-        document.getElementById("status-msg").textContent =
-          `Success: ${data.units} model analyzed.`;
-        document.getElementById("status-msg").style.color = "#10b981";
+        const statusMsg = document.getElementById("status-msg");
+        if (statusMsg) {
+          statusMsg.textContent = `Success: Analysis complete (${data.units}).`;
+          statusMsg.style.color = "#10b981";
+        }
+      };
+    </script>
+
+    <script type="module">
+      console.log("Frontend: Initializing DFM Viewer module...");
+      try {
+        const { DFMViewer } = await import("/static/js/viewer.js");
+        window.dfmViewer = new DFMViewer("viewport");
+        console.log("ThreeJS: Viewer initialized successfully");
+      } catch (e) {
+        console.error("ThreeJS: Failed to initialize viewer", e);
+        const statusMsg = document.getElementById("status-msg");
+        if (statusMsg) {
+          statusMsg.textContent = "Viewer Error: Failed to load 3D visualizer.";
+          statusMsg.style.color = "#ef4444";
+        }
       }
 
       document.getElementById("upload-form").addEventListener("submit", () => {
+        console.log("HTMX: Form submission started");
         document.getElementById("loading-overlay").style.display = "flex";
         document.getElementById("status-msg").textContent = "Analyzing...";
         document.getElementById("status-msg").style.color = "var(--text-dim)";
