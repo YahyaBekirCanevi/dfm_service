@@ -56,4 +56,4 @@ def test_topology_indexer_hierarchy():
     edge_ids = indexer.get_face_edges(face_id)
     assert len(edge_ids) > 0
     for eid in edge_ids:
-        assert eid in indexer.edges
+        assert eid in indexer.edges.values()
