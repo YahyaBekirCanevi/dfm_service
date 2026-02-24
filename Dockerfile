@@ -11,7 +11,9 @@ WORKDIR /app
 
 # Run unit tests during build
 # If tests fail, the build fails and Render won't deploy
-RUN micromamba run -n base pytest
+# Run unit tests during build
+# If tests fail, the build fails and Render won't deploy
+RUN micromamba run -n base python -m pytest
 
 # Expose the port (Render uses $PORT)
 ENV PORT=8000
