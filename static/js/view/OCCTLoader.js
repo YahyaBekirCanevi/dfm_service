@@ -155,9 +155,16 @@ export class OCCTLoader {
         await this.ensureThreeLoaded();
 
         console.log('OCCTLoader: Importing occt-import-js...');
-        const OCCT = (await import("occt-import-js")).default;
+        // Handle non-ESM library by checking for global if default is missing
+        const OCCT_module = await import("occt-import-js");
+        const OCCT = OCCT_module.default || window.occtimportjs || occtimportjs;
 
         console.log('OCCTLoader: Initializing OCCT WASM...');
+        if (typeof OCCT !== 'function') {
+            console.error('OCCTLoader: occt-import-js is not a function', { OCCT_module, OCCT });
+            throw new Error('OCCTLoader: occt-import-js initialization failed. The library was not found or is not a function.');
+        }
+
         const occt = await OCCT({
             locateFile: (file) => {
                 console.log('OCCTLoader: locateFile called for', file);
