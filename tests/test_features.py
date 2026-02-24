@@ -20,10 +20,10 @@ def test_extract_holes():
     
     indexer = TopologyIndexer(shape)
     extractor = FeatureExtractor(shape, indexer)
-    features = extractor.extract_features()
+    holes = extractor.extract_holes()
     
-    assert len(features["holes"]) == 1
-    hole = features["holes"][0]
+    assert len(holes) == 1
+    hole = holes[0]
     assert hole["diameter"] == pytest.approx(10.0)
     # Through hole depth should be approximately box height
     assert hole["depth"] >= 50.0 

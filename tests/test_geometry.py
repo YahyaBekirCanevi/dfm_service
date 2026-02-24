@@ -23,16 +23,28 @@ def test_topology_indexer_stable_ids():
     
     # Check if IDs are consistent across two different instances of same geometry
     # (Since it's deterministic based on topology/geometry hashes)
-    ids1 = sorted(indexer1.faces.keys())
-    ids2 = sorted(indexer2.faces.keys())
+    ids1 = sorted(indexer1.faces.values())
+    ids2 = sorted(indexer2.faces.values())
     
     assert ids1 == ids2
     
     # Verify properties
     face_id = ids1[0]
-    face_data = indexer1.get_face_data(indexer1.faces[face_id])
-    assert "area" in face_data
-    assert face_data["area"] == pytest.approx(100.0)
+    # Get the actual face shape for property checking
+    face_shape = None
+    for shape, fid in indexer1.faces.items():
+        if fid == face_id:
+            face_shape = shape
+            break
+            
+    # Use GeometryEngine or manual extraction for testing face data
+    from app.core.feature_extraction import FeatureExtractor
+    extractor = FeatureExtractor(box1, indexer1)
+    planar_faces = extractor.extract_planar_faces()
+    # Find the face in extracted features
+    matching = [f for f in planar_faces if f["face_id"] == face_id]
+    assert len(matching) > 0
+    assert matching[0]["area"] == pytest.approx(100.0)
 
 @pytest.mark.skipif(not OCC_AVAILABLE, reason="pythonocc-core not installed")
 def test_topology_indexer_hierarchy():
@@ -40,7 +52,7 @@ def test_topology_indexer_hierarchy():
     indexer = TopologyIndexer(box)
     
     # Test face to edge mapping
-    face_id = list(indexer.faces.keys())[0]
+    face_id = list(indexer.faces.values())[0]
     edge_ids = indexer.get_face_edges(face_id)
     assert len(edge_ids) > 0
     for eid in edge_ids:

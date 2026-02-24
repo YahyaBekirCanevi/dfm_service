@@ -77,6 +77,25 @@ class TopologyIndexer:
         if shape in self.solid_map: return self.solid_map[shape]
         return "unknown"
 
+    def get_face_edges(self, face_id: str) -> List[str]:
+        """Returns a list of edge IDs belonging to the given face ID."""
+        # Find the face shape by ID
+        face_shape = None
+        for shape, fid in self.face_map.items():
+            if fid == face_id:
+                face_shape = shape
+                break
+        
+        if not face_shape:
+            return []
+            
+        edge_ids = []
+        explorer = TopExp_Explorer(face_shape, TopAbs_EDGE)
+        while explorer.More():
+            edge_ids.append(self.get_id(explorer.Current()))
+            explorer.Next()
+        return edge_ids
+
 class GeometryEngine:
     def __init__(self):
         self.shape: Optional[TopoDS_Shape] = None
