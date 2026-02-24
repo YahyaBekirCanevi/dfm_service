@@ -10,9 +10,10 @@ def test_geometric_reference():
     assert ref.id == "f1"
 
 def test_face_data():
-    face = FaceData(area=100.0, normal=[0, 0, 1], vertices=["v1", "v2"])
+    face = FaceData(surface_type="plane", area=100.0, centroid=[0, 0, 0], normal=[0, 0, 1])
     assert face.area == 100.0
     assert face.normal == [0, 0, 1]
+    assert face.surface_type == "plane"
 
 def test_dfm_feedback():
     feedback = DFMFeedback(
@@ -28,15 +29,15 @@ def test_dfm_feedback():
 
 def test_geometry_index():
     index = GeometryIndex(
-        faces={"f1": FaceData(area=50.0, normal=[1, 0, 0], vertices=[])}
+        faces={"f1": FaceData(surface_type="plane", area=50.0, centroid=[0,0,0], normal=[1, 0, 0])}
     )
     assert "f1" in index.faces
     assert index.faces["f1"].area == 50.0
 
 def test_analysis_response():
     # Minimal valid object check
-    bbox = BoundingBox(min=[0,0,0], max=[10,10,10], center=[5,5,5], dimensions=[10,10,10])
-    features = Features(holes=[], panel_angles=[], min_wall_thickness={"thickness": 0, "faces": []}, internal_corners=[])
+    bbox = BoundingBox(x=10, y=10, z=10)
+    features = Features(holes=[], panel_angles=[], min_wall_thickness=0.0, internal_corners=[])
     geo_index = GeometryIndex()
     
     response = AnalysisResponse(

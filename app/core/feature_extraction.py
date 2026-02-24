@@ -166,16 +166,22 @@ class FeatureExtractor:
             surf = BRepAdaptor_Surface(face)
             
             if surf.GetType() == GeomAbs_Plane:
+                from OCC.Core.TopAbs import TopAbs_REVERSED
                 props = GProp_GProps()
                 brepgprop_SurfaceProperties(face, props)
                 area = props.Mass()
-                normal = surf.Plane().Axis().Direction()
+                
+                # Get geometric normal
+                gp_norm = surf.Plane().Axis().Direction()
+                # Adjust for face orientation
+                if face.Orientation() == TopAbs_REVERSED:
+                    gp_norm.Reverse()
                 
                 planar_faces.append({
                     "face": face,
                     "face_id": self.indexer.get_id(face) if self.indexer else "unknown",
                     "area": area,
-                    "normal": [normal.X(), normal.Y(), normal.Z()]
+                    "normal": [gp_norm.X(), gp_norm.Y(), gp_norm.Z()]
                 })
             explorer.Next()
         

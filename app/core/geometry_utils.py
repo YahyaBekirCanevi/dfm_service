@@ -30,6 +30,13 @@ class TopologyIndexer:
         self.solid_map: Dict[TopoDS_Shape, str] = {}
         self._index_all()
 
+    @property
+    def faces(self): return self.face_map
+    @property
+    def edges(self): return self.edge_map
+    @property
+    def vertices(self): return self.vertex_map
+
     def _index_all(self):
         # Index Solids
         explorer = TopExp_Explorer(self.shape, TopAbs_SOLID)
