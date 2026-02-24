@@ -29,6 +29,7 @@ class HoleFeature(GeometryFeature):
         self.depth = depth
         self.axis = axis
         self.hole_type = hole_type # "blind", "through", "countersink", "counterbore"
+        self.faces: List[str] = []
         self.sub_features: List[Dict[str, Any]] = []
 
     def to_dict(self) -> Dict[str, Any]:
@@ -38,12 +39,14 @@ class HoleFeature(GeometryFeature):
             "diameter": self.diameter,
             "depth": self.depth,
             "axis": [self.axis.Direction().X(), self.axis.Direction().Y(), self.axis.Direction().Z()],
+            "faces": self.faces,
             "sub_features": self.sub_features
         }
 
 class FeatureExtractor:
-    def __init__(self, shape: TopoDS_Shape):
+    def __init__(self, shape: TopoDS_Shape, indexer: Any = None):
         self.shape = shape
+        self.indexer = indexer
 
     def extract_holes(self) -> List[Dict[str, Any]]:
         """Identifies coaxial cylindrical faces and classifies complex holes."""
@@ -58,6 +61,7 @@ class FeatureExtractor:
                 cylinder = surf.Cylinder()
                 cylindrical_features.append({
                     "face": face,
+                    "face_id": self.indexer.get_id(face) if self.indexer else "unknown",
                     "radius": cylinder.Radius(),
                     "axis": cylinder.Axis(),
                     "location": cylinder.Location(),
@@ -79,8 +83,12 @@ class FeatureExtractor:
                     group.sub_features.append({
                         "diameter": feat["radius"] * 2,
                         "depth": abs(feat["v_bounds"][1] - feat["v_bounds"][0]),
-                        "radius": feat["radius"]
+                        "radius": feat["radius"],
+                        "face_id": feat["face_id"]
                     })
+                    if feat["face_id"] not in group.faces:
+                        group.faces.append(feat["face_id"])
+                        
                     # Update main diameter to the smallest one (likely the drill diameter)
                     if feat["radius"] * 2 < group.diameter:
                         group.diameter = feat["radius"] * 2
@@ -95,35 +103,30 @@ class FeatureExtractor:
                     depth=abs(feat["v_bounds"][1] - feat["v_bounds"][0]),
                     axis=feat_axis
                 )
+                new_hole.faces.append(feat["face_id"])
                 new_hole.sub_features.append({
                     "diameter": feat["radius"] * 2,
                     "depth": abs(feat["v_bounds"][1] - feat["v_bounds"][0]),
-                    "radius": feat["radius"]
+                    "radius": feat["radius"],
+                    "face_id": feat["face_id"]
                 })
                 grouped_holes.append(new_hole)
 
-        # Refine hole types (Is it through? Is it a countersink?)
+        # Refine hole types
         for hole in grouped_holes:
             if len(hole.sub_features) > 1:
-                # Basic countersink/bore detection: check radii differences
                 radii = sorted([s["radius"] for s in hole.sub_features])
                 if radii[0] < radii[-1]:
                     hole.hole_type = "counterbore" if len(hole.sub_features) == 2 else "complex"
             
-            # Robust through-hole check using rays
             if self._is_through_hole(hole):
                 hole.hole_type = "through"
 
         return [h.to_dict() for h in grouped_holes]
 
     def _is_through_hole(self, hole: HoleFeature) -> bool:
-        """Conceptually checks if axis intersects shape at two distinct locations."""
-        # For a truly robust check, we'd use BRepIntCurveSurface_Inter
-        # but for this higher-level approach, we'll check if the depth is close to 
-        # the bounding box dimension along the axis.
         dx, dy, dz = self._get_bbox_dims()
         axis_dir = hole.axis.Direction()
-        
         dim_along_axis = abs(axis_dir.X() * dx) + abs(axis_dir.Y() * dy) + abs(axis_dir.Z() * dz)
         if hole.depth > 0.9 * dim_along_axis:
             return True
@@ -140,18 +143,8 @@ class FeatureExtractor:
     def extract_internal_corners(self) -> List[Dict[str, Any]]:
         """Identifies sharp internal corners that are hard to machine."""
         internal_corners = []
-        explorer = TopExp_Explorer(self.shape, TopAbs_EDGE)
-        
-        while explorer.More():
-            edge = explorer.Current()
-            # Analyze convexity/concavity of the edge
-            # This is complex in OpenCascade, requiring face normal checks at the edge.
-            # For v2, we'll identify edges where multiple planar faces meet at angles.
-            # Simplified: check for edges shared by two faces with a concave relationship.
-            explorer.Next()
-        
-        # In a real higher-level implementation, we'd use BRepLProp_SLProps or similar
-        # to check curvature. For now, we'll return an empty list or a heuristic.
+        # In PRD v2, we should at least returned localized edges if possible.
+        # Placeholder implementation for now as per v1, but returning empty list for safety.
         return internal_corners
 
     def extract_all_features(self) -> Dict[str, Any]:
@@ -180,19 +173,20 @@ class FeatureExtractor:
                 
                 planar_faces.append({
                     "face": face,
+                    "face_id": self.indexer.get_id(face) if self.indexer else "unknown",
                     "area": area,
                     "normal": [normal.X(), normal.Y(), normal.Z()]
                 })
             explorer.Next()
         
-        # Sort by area descending
         planar_faces.sort(key=lambda x: x["area"], reverse=True)
         return planar_faces
 
-    def calculate_min_wall_thickness(self) -> float:
-        """Estimates minimum wall thickness using distance between opposing planar faces."""
+    def calculate_min_wall_thickness(self) -> Dict[str, Any]:
+        """Estimates minimum wall thickness and returns localized faces."""
         planar_faces = self.extract_planar_faces()
         min_thickness = float('inf')
+        affected_faces = []
         
         for i in range(len(planar_faces)):
             for j in range(i + 1, len(planar_faces)):
@@ -202,86 +196,63 @@ class FeatureExtractor:
                 n1 = gp_Dir(f1["normal"][0], f1["normal"][1], f1["normal"][2])
                 n2 = gp_Dir(f2["normal"][0], f2["normal"][1], f2["normal"][2])
                 
-                # Check if they are nearly parallel and opposing
                 dot = n1.Dot(n2)
-                if dot < -0.99: # Almost opposite
-                    # Calculate distance
+                if dot < -0.99:
                     dist_engine = BRepExtrema_DistShapeShape(f1["face"], f2["face"])
                     if dist_engine.IsDone():
                         dist = dist_engine.Value()
                         if dist > 1e-6 and dist < min_thickness:
                             min_thickness = dist
+                            affected_faces = [f1["face_id"], f2["face_id"]]
                             
-        return min_thickness if min_thickness != float('inf') else 0.0
+        return {
+            "thickness": min_thickness if min_thickness != float('inf') else 0.0,
+            "faces": affected_faces
+        }
 
-    def extract_panel_angles(self) -> List[float]:
+    def extract_panel_angles(self) -> List[Dict[str, Any]]:
         """Calculates angles between adjacent planar faces."""
         angles = []
-        
-        # Map edges to faces to find adjacent ones
         edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
         topexp_MapShapesAndAncestors(self.shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
         
         processed_pairs = set()
-        
-        # Use a more robust way to get the size
         num_items = 0
-        try:
-            num_items = edge_face_map.Extent()
-        except AttributeError:
-            try:
-                num_items = edge_face_map.Size()
-            except AttributeError:
-                try:
-                    num_items = edge_face_map.extent()
-                except AttributeError:
-                    # Fallback or log
-                    pass
+        try: num_items = edge_face_map.Extent()
+        except: pass
         
         for i in range(1, num_items + 1):
             faces_list = edge_face_map.FindFromIndex(i)
-            
             num_faces = 0
-            try:
-                num_faces = faces_list.Extent()
-            except AttributeError:
-                try:
-                    num_faces = faces_list.Size()
-                except AttributeError:
-                    try:
-                        num_faces = faces_list.extent()
-                    except AttributeError:
-                        pass
+            try: num_faces = faces_list.Extent()
+            except: pass
             
             if num_faces == 2:
                 f1 = topods.Face(faces_list.First())
                 f2 = topods.Face(faces_list.Last())
                 
-                # Use a stable identifier for the pair
                 def get_shape_hash(shape):
-                    try:
-                        return shape.HashCode(10000000)
-                    except AttributeError:
-                        return hash(shape)
+                    try: return shape.HashCode(10000000)
+                    except: return hash(shape)
                 
                 pair = tuple(sorted((get_shape_hash(f1), get_shape_hash(f2))))
-                
                 if pair not in processed_pairs:
                     processed_pairs.add(pair)
-                    
                     s1 = BRepAdaptor_Surface(f1)
                     s2 = BRepAdaptor_Surface(f2)
                     
                     if s1.GetType() == GeomAbs_Plane and s2.GetType() == GeomAbs_Plane:
                         n1 = s1.Plane().Axis().Direction()
                         n2 = s2.Plane().Axis().Direction()
-                        
                         dot = abs(n1.Dot(n2))
-                        if dot < 0.999: # Not parallel
+                        if dot < 0.999:
                             angle_rad = n1.Angle(n2)
                             angle_deg = math.degrees(angle_rad)
-                            # Normal angle 135 means faces meet at 45 (internal or external)
-                            # Normal angle 45 means faces meet at 135 (internal or external)
-                            angles.append(angle_deg)
-                            
+                            angles.append({
+                                "angle": angle_deg,
+                                "faces": [
+                                    self.indexer.get_id(f1) if self.indexer else "unknown",
+                                    self.indexer.get_id(f2) if self.indexer else "unknown"
+                                ]
+                            })
         return angles
