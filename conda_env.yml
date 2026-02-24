@@ -12,4 +12,6 @@ dependencies:
       - python-multipart
       - pydantic
       - requests
-      - jinja2
+      - pytest
+      - pytest-cov
+      - httpx

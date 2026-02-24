@@ -9,6 +9,10 @@ RUN micromamba install -y -n base -f /tmp/conda_env.yml && \
 COPY --chown=$MAMBA_USER:$MAMBA_USER . /app
 WORKDIR /app
 
+# Run unit tests during build
+# If tests fail, the build fails and Render won't deploy
+RUN micromamba run -n base pytest
+
 # Expose the port (Render uses $PORT)
 ENV PORT=8000
 EXPOSE $PORT

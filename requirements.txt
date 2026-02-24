@@ -3,7 +3,9 @@ uvicorn
 python-multipart
 pydantic
 requests
-jinja2
+pytest
+pytest-cov
+httpx
 # NOTE: pythonocc-core is NOT available via pip on many platforms.
 # It MUST be installed via Conda/Mamba (as shown in Dockerfile).
 # For local dev: conda install -c conda-forge pythonocc-core

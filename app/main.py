@@ -1,32 +1,17 @@
 import shutil
 import os
 import uuid
-from fastapi import FastAPI, File, UploadFile, HTTPException, Request
-from fastapi.responses import HTMLResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.responses import JSONResponse
 from .models.schemas import AnalysisResponse, BoundingBox, Features, HoleFeature, DFMFeedback
 from .core.geometry_utils import GeometryEngine
 from .core.feature_extraction import FeatureExtractor
 from .core.dfm_rules import DFMRulesEngine
 
 app = FastAPI(title="DFM Engine", description="Deterministic DFM analysis for 3-axis CNC milling")
-
-# Static files and templates
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
-
+# Temporary storage for uploaded files
 TEMP_DIR = "temp_uploads"
 os.makedirs(TEMP_DIR, exist_ok=True)
-
-@app.get("/occt-import-js.wasm")
-async def serve_wasm():
-    # Served from node_modules if using local package, or remain at view
-    return FileResponse("static/js/view/occt-import-js.wasm")
-
-@app.get("/", response_class=HTMLResponse)
-async def read_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_geometry_file(file: UploadFile = File(...)):
