@@ -256,6 +256,7 @@ class FeatureExtractor:
                             angle_deg = math.degrees(angle_rad)
                             angles.append({
                                 "angle": angle_deg,
+                                "edge_id": self.indexer.get_id(topods.Edge(edge_face_map.FindKey(i))),
                                 "faces": [
                                     self.indexer.get_id(f1) if self.indexer else "unknown",
                                     self.indexer.get_id(f2) if self.indexer else "unknown"

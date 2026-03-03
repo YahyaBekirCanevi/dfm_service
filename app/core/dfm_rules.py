@@ -62,7 +62,8 @@ class PanelAngleRule(DFMRule):
                     severity="medium",
                     message=f"Panel junction {i+1} has an angle of {angle:.1f} degrees, which exceeds the 90-degree limit for standard setups.",
                     geometric_references=[
-                        GeometricReference(type="face", id=fid) for fid in entry.get("faces", [])
+                        GeometricReference(type="edge", id=entry.get("edge_id", "unknown")),
+                        *[GeometricReference(type="face", id=fid) for fid in entry.get("faces", [])]
                     ],
                     metadata={
                         "angle": angle,
