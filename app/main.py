@@ -2,6 +2,7 @@ import shutil
 import os
 import uuid
 from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from .models.schemas import AnalysisResponse, BoundingBox, Features, HoleFeature, DFMFeedback
 from .core.geometry_utils import GeometryEngine
@@ -9,6 +10,13 @@ from .core.feature_extraction import FeatureExtractor
 from .core.dfm_rules import DFMRulesEngine
 
 app = FastAPI(title="DFM Engine", description="Deterministic DFM analysis for 3-axis CNC milling")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # Temporary storage for uploaded files
 TEMP_DIR = "temp_uploads"
 os.makedirs(TEMP_DIR, exist_ok=True)
